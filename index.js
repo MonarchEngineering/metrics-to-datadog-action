@@ -1,21 +1,35 @@
 const core = require('@actions/core');
-const wait = require('./wait');
+const github = require('@actions/github');
+const datadog = require('datadog-metrics');
+const getRun = require('./getRun');
 
-
-// most @actions toolkit packages have async methods
 async function run() {
   try {
-    const ms = core.getInput('milliseconds');
-    core.info(`Waiting ${ms} milliseconds ...`);
+    datadog.init({
+      apiKey: core.getInput('datadog-api-key'),
+      prefix: 'actions.',
+      defaultTags: [
+          `status:${core.getInput('status')}`
+      ],
+    });
 
-    core.debug((new Date()).toTimeString()); // debug is only output if you set the secret `ACTIONS_RUNNER_DEBUG` to true
-    await wait(parseInt(ms));
-    core.info((new Date()).toTimeString());
+    run = await getRun(github.context);
+    const repo = normalizeString(github.context.repo.repo);
+    const actionName = normalizeString(run.runName);
 
-    core.setOutput('time', new Date().toTimeString());
+    datadog.gauge(`${repo}.${actionName}.duration`, run.duration / 1000);
+    datadog.flush();
+
   } catch (error) {
     core.setFailed(error.message);
   }
+}
+
+function normalizeString(str) {
+  return str.
+    toLowerCase().
+    replace(/ /g, '_').
+    replace(/-/g, '_')
 }
 
 run();
